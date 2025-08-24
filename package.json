@@ -1,0 +1,20 @@
+{
+  "name": "@reallyspecific/bodykit-fonts",
+  "version": "1.0.0",
+  "description": "A font compilation and processing engine for Bodykit",
+  "main": "main.js",
+  "exports": [
+    "main.js"
+  ],
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "string-strip-html": "^13.4.6",
+    "ttfmeta": "^1.1.2",
+    "@web-alchemy/fonttools": "^1.3.4",
+    "@reallyspecific/bodykit": "^1.3.1"
+  },
+  "author": "FLOPS LLC <ops@floatingpoint.cloud>",
+  "license": "GPL-3.0-or-later"
+}
