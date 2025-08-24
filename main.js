@@ -4,10 +4,10 @@ import { subset } from '@web-alchemy/fonttools';
 import {stripHtml} from "string-strip-html";
 import {ttfInfo} from 'ttfmeta';
 
-import {Compiler} from "@reallyspecific/bodykit/compiler";
+import {Compiler} from "@reallyspecific/bodykit";
 
 
-export default class FontCompiler extends Compiler {
+export default class extends Compiler {
 
 	fileExtension = 'woff2';
 	allowedExtensions = [ '.otf', '.ttf' ];
@@ -22,10 +22,11 @@ export default class FontCompiler extends Compiler {
 
 		let compiledContent = '';
 
-		let contentFiles = readDir( props.sourceIn || this.sourceIn, { recursive: true } );
-		contentFiles = files.filter( file => path.extname( file ) === '.html' );
+		let destOut = props.destOut ?? this.destOut;
+		let contentFiles = readDir( destOut, { recursive: true } );
+		contentFiles = contentFiles.filter( file => path.extname( file ) === '.html' );
 		contentFiles.forEach( file => {
-			let fileContents = readFile( file );
+			let fileContents = readFile( path.join( destOut, file ), { encoding: 'utf-8' } ).toString();
 			fileContents = stripHtml( fileContents ).result;
 			compiledContent += fileContents;
 		} );
@@ -39,12 +40,19 @@ export default class FontCompiler extends Compiler {
 			if ( ! fontBuffer ) {
 				return;
 			}
-			this.write( [
+			await this.write( [
 				{
-					filename: path.basename( 'fonts.css' ),
+					filename: path.basename( this.buildOptions?.embedded ),
 					contents: fontBuffer,
 				}
 			], path.join( this.sourceIn, path.dirname( this.buildOptions.embedded ) ) );
+			await this.write( [
+				{
+					filename: path.basename( this.buildOptions?.embedded ),
+					contents: fontBuffer,
+				}
+			], path.join( destOut, path.dirname( this.buildOptions.embedded ) ) );
+
 		}
 	}
 
@@ -88,10 +96,10 @@ export default class FontCompiler extends Compiler {
 					const base64contents = Buffer.from(outputFileBuffer).toString('base64');
 					this.embeddedFontBuffer.push(
 						`@font-face {` +
-							`font-family: '${fontName}';` +
-							`font-style: ${fontStyle};` +
-							`font-weight: ${fontWeight};` +
-							`src: url('data:font/woff2;charset=utf-8;base64,${base64contents}') format('woff2');` +
+						`font-family: '${fontName}';` +
+						`font-style: ${fontStyle};` +
+						`font-weight: ${fontWeight};` +
+						`src: url('data:font/woff2;charset=utf-8;base64,${base64contents}') format('woff2');` +
 						`}`
 					);
 				}
