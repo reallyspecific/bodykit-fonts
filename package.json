@@ -1,6 +1,6 @@
 {
   "name": "@reallyspecific/bodykit-fonts",
-  "version": "1.0.1ß",
+  "version": "1.0.1",
   "description": "A font compilation and processing engine for Bodykit",
   "main": "main.js",
   "type": "module",
