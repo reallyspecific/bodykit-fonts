@@ -4,79 +4,91 @@ import { subset } from '@web-alchemy/fonttools';
 import {stripHtml} from "string-strip-html";
 import {ttfInfo} from 'ttfmeta';
 
-import {Compiler} from "@reallyspecific/bodykit";
-
+import Compiler from "@reallyspecific/bodykit/compiler";
 
 export default class extends Compiler {
 
-	fileExtension = 'woff2';
-	allowedExtensions = [ '.otf', '.ttf' ];
-	fileType
+	static type = 'fonts';
+
+	flavor = 'woff2';
+
+	include = ['*.ttf','*.woff','*.otf','*.eot','*.svg'];
+	filenamePattern = null;
+
+	clean = ['*.woff2'];
 
 	constructor( props ) {
 		super( props );
+		this.filenamePattern = '[path]/[name].' + this.flavor;
 		this.embeddedFontBuffer = [];
 	}
 
 	async compile( props = {} ) {
 
-		let compiledContent = '';
+		let compiledContent = [];
 
-		let destOut = props.destOut ?? this.destOut;
-		let contentFiles = readDir( destOut, { recursive: true } );
-		contentFiles = contentFiles.filter( file => path.extname( file ) === '.html' );
-		contentFiles.forEach( file => {
-			let fileContents = readFile( path.join( destOut, file ), { encoding: 'utf-8' } ).toString();
-			fileContents = stripHtml( fileContents ).result;
-			compiledContent += fileContents;
-		} );
+		const collectContent = ( props ) => {
+			const fileContents = readFile( props.in, { encoding: 'utf-8' } ).toString();
+			if ( fileContents ) {
+				compiledContent.push( stripHtml( fileContents ).result );
+			}
+		}
 
-		props.compiledContent = compiledContent;
+		if ( this.options.compileContent ) {
+			let sourcePath = this.options.compileContent.source ?? this.sourceIn;
+			if ( sourcePath && ! path.isAbsolute( sourcePath ) && sourcePath.startsWith('.') ) {
+				sourcePath = path.join( process.cwd(), sourcePath );
+			} else if ( this.options.compileContent.source ) {
+				sourcePath = path.join( this.sourceIn, sourcePath );
+			}
+
+			await this.walkDirectory( {
+				rootPath: sourcePath,
+				in: this.options.compileContent.source ?? '',
+				include: this.options.compileContent.include ?? ['*.html'],
+				ignore: this.options.compileContent.ignore ?? null,
+				exclude: this.options.compileContent.exclude ?? null,
+				build: collectContent,
+				write: false,
+			} );
+			if ( compiledContent.length > 0 ) {
+				this.options.text = compiledContent.join(' ');
+			}
+		}
 
 		await super.compile(props);
-		if ( this.buildOptions?.embedded ) {
-
+		if ( this.options.embedded ) {
+			const filepath = this.out( path.dirname( this.options.embedded ), 'compiled-fonts', '.fonts.css', this.options.embedded );
 			const fontBuffer = this.embeddedFontBuffer.join(' ');
 			if ( ! fontBuffer ) {
 				return;
 			}
 			await this.write( [
 				{
-					filename: path.basename( this.buildOptions?.embedded ),
+					out: path.join( this.destOut, filepath ),
 					contents: fontBuffer,
 				}
-			], path.join( this.sourceIn, path.dirname( this.buildOptions.embedded ) ) );
-			await this.write( [
-				{
-					filename: path.basename( this.buildOptions?.embedded ),
-					contents: fontBuffer,
-				}
-			], path.join( destOut, path.dirname( this.buildOptions.embedded ) ) );
+			] );
 
 		}
 	}
 
-	async build( { filePath, buildOptions, compiledContent } ) {
+	async build( props ) {
 
-		const inputFileBuffer = readFile(filePath);
+		const inputFileBuffer = readFile( props.in );
 
 		let unicodes = 'U+0000-007F';
-		if ( ! compiledContent ) {
+		if ( ! this.options.text ) {
 			unicodes += ',U+00A0-00FF';
 		}
 
 		try {
-			const outputFileBuffer = await subset(inputFileBuffer, {
-				'text': compiledContent ?? null,
-				'unicodes': buildOptions.unicodes ?? unicodes,
-				'flavor': buildOptions.outputType ?? 'woff2',
-			});
-			const fontFileName = path.basename(filePath, path.extname(filePath)) + '.woff2';
-			const relPath = path.relative( this.sourceIn, path.dirname( filePath ) );
+			const outputFileBuffer = await subset( inputFileBuffer, {
+				'unicodes': unicodes,
+				'flavor': 'woff2',
+			} );
 
-			const cssFileName = path.basename(filePath, path.extname(filePath)) + '.css';
-
-			if ( buildOptions?.embedded ) {
+			if ( this.options.embedded ) {
 				let fontName, fontStyle, fontWeight;
 				await ttfInfo(inputFileBuffer, (err, result) => {
 					if (err) {
@@ -106,25 +118,14 @@ export default class extends Compiler {
 
 			}
 
-			this.collection.push( {
-				destPath: path.join( this.destOut, relPath, fontFileName ),
-				relPath: path.join( relPath, fontFileName ),
-				filePath: filePath,
-				filename: fontFileName,
-			} );
-			const files = [ {
-				destPath: path.join( this.destOut, relPath, fontFileName ),
-				filePath: filePath,
-				relPath: path.join( relPath, fontFileName ),
-				filename: fontFileName,
-				contents: outputFileBuffer
-			} ];
+			this.collection.add( props );
+			return  [ { ...props, contents: outputFileBuffer } ];
 
-			return files;
 
 		} catch( error ) {
 			return [{
-				filePath,
+				in: props.in,
+				out: props.out,
 				error: {
 					type: error.name,
 					message: error.message,
